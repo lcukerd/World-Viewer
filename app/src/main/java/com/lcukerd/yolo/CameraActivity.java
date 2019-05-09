@@ -38,8 +38,11 @@ import android.os.Trace;
 import android.speech.tts.TextToSpeech;
 import android.util.Size;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.Surface;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import java.nio.ByteBuffer;
@@ -71,6 +74,10 @@ public abstract class CameraActivity extends Activity
     private Runnable postInferenceCallback;
     private Runnable imageConverter;
 
+    private ImageView img1,img2,img3;
+
+    public static int distance = 25;
+
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         LOGGER.d("onCreate " + this);
@@ -87,6 +94,31 @@ public abstract class CameraActivity extends Activity
         } else {
             requestPermission();
         }
+        img1 = findViewById(R.id.img25);
+        img2 = findViewById(R.id.img50);
+        img3 = findViewById(R.id.img100);
+//        img1.setOnTouchListener(new View.OnTouchListener() {
+//            @Override
+//            public boolean onTouch(View v, MotionEvent event) {
+//                distance = 25;
+//                return true;
+//            }
+//        });
+//        img2.setOnTouchListener(new View.OnTouchListener() {
+//            @Override
+//            public boolean onTouch(View v, MotionEvent event) {
+//                distance = 50;
+//                return true;
+//            }
+//        });
+//        img3.setOnTouchListener(new View.OnTouchListener() {
+//            @Override
+//            public boolean onTouch(View v, MotionEvent event) {
+//                distance = 100;
+//                return true;
+//            }
+//        });
+
     }
 
     private byte[] lastPreviewFrame;

@@ -28,6 +28,7 @@ import android.graphics.Typeface;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.SystemClock;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.util.Size;
 import android.util.TypedValue;
 import android.widget.Toast;
@@ -74,6 +75,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     private static final String YOLO_OUTPUT_NAMES = "output";
     private static final int YOLO_BLOCK_SIZE = 32;
     private ArrayList<String> objects = null, prevobject = null;
+    private int prevDistance;
 
     // Which detection model to use: by default uses Tensorflow Object Detection API frozen
     // checkpoints.  Optionally use legacy Multibox (trained using an older version of the API)
@@ -117,6 +119,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     private byte[] luminanceCopy;
 
     private BorderedText borderedText;
+
+    private String moving = "";
+    private List<Classifier.Recognition> prevrecogs;
 
     @Override
     public void onPreviewSizeChosen(final Size size, final int rotation) {
@@ -263,7 +268,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             return;
         }
         computingDetection = true;
-        LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
+//        LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
 
         rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
 
@@ -284,7 +289,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                 new Runnable() {
                     @Override
                     public void run() {
-                        LOGGER.i("Running detection on image " + currTimestamp);
+//                        LOGGER.i("Running detection on image " + currTimestamp);
                         final long startTime = SystemClock.uptimeMillis();
                         final List<Classifier.Recognition> results = detector.recognizeImage(croppedBitmap);
                         lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
@@ -311,10 +316,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                         if (objects == null) {
                             objects = new ArrayList<>();
                             prevobject = new ArrayList<>();
+                            prevrecogs = new LinkedList<>();
                         }
                         objects.clear();
+                        moving = "";
                         final List<Classifier.Recognition> mappedRecognitions =
                                 new LinkedList<Classifier.Recognition>();
+
+                        String objects_title = "";
 
                         for (final Classifier.Recognition result : results) {
                             final RectF location = result.getLocation();
@@ -326,16 +335,39 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                                 cropToFrameTransform.mapRect(location);
                                 result.setLocation(location);
                                 mappedRecognitions.add(result);
+                                Classifier.Recognition temp = null;
+                                for (Classifier.Recognition t : prevrecogs) {
+                                    if (t.getTitle() == result.getTitle())
+                                        temp = t;
+                                }
+                                if (temp != null) {
+                                    if (perimeter(location) < perimeter(temp.getLocation()) - 20)
+                                        moving = " moving away";
+                                    else if (perimeter(location) > perimeter(temp.getLocation()) + 20)
+                                        moving = " moving closer";
+                                    else
+                                        break;
+                                    objects_title += result.getTitle() + moving;
+                                } else objects_title += result.getTitle() + " ahead";
+
+                                objects_title += " ";
                             }
                         }
-                        String objects_title = "";
-                        for (String obj : objects){
-                            if (prevobject.contains(obj) == false)
-                                objects_title += obj + " ";
+//                        for (String obj : objects) {
+//                            if (prevobject.contains(obj) == false || moving != "")
+//                                objects_title += obj + " ";
+//                        }
+//                        if (objects_title != "" || moving != "")
+//                            objects_title += moving == "" ? " ahead" : moving;
+                        prevDistance = distance;
+                        prevrecogs.clear();
+                        prevrecogs.addAll(results);
+                        tts.speak(objects_title, TextToSpeech.QUEUE_FLUSH, null);
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException e) {
+                            Log.e(getClass().getSimpleName(), "run: ", e);
                         }
-                        if (objects_title != "")
-                            objects_title += "ahead";
-                        tts.speak(objects_title, TextToSpeech.QUEUE_ADD, null);
                         prevobject.clear();
                         prevobject.addAll(objects);
                         tracker.trackResults(mappedRecognitions, luminanceCopy, currTimestamp);
@@ -343,6 +375,12 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
                         requestRender();
                         computingDetection = false;
+                    }
+
+                    float perimeter(RectF rectF) {
+                        float dist = (rectF.top - rectF.bottom) + (rectF.right - rectF.left);
+                        LOGGER.i("perimeter: " + String.valueOf(dist));
+                        return dist;
                     }
                 });
     }
